@@ -123,6 +123,16 @@ as an effective PRNG. The period of this minimal PRNG is at least
 2<sup>159</sup>. The initial parameters can be varied at will, and will not
 "break" the PRNG. Setting only the `Seed` value guarantees a random start
 point within the whole PRNG period, with at least 2<sup>64</sup> spacing.
+It is generally recommended to initialize `lcg` and `Hash` variables to 0.
+
+Since the PRNG is based on multiplication with recurrence, it can be
+classified as "chaotic". An extremely small number (just `sys_size_bits`
+which is 192 out of 2<sup>64</sup> for this minimal PRNG) of its possible
+PRNG cycles have reduced periods, but they are never shorter than
+2<sup>hash_bits-hash_count</sup>, which depends on the number of hashwords,
+as hashwords are linear accumulators similar to Weyl sequences
+(2<sup>63</sup> for this minimal PRNG).
+
 The example code follows:
 
 ```c
@@ -157,18 +167,18 @@ For implementation assurance, here are the first 16 output values in hex
 0x3D42E83328C09C8F 0x7E691C66BAC23222 0x82E1032F441F23A5 0xA4BDE5C4A05E6256
 ```
 
-Note that such minimal 1-hashword PRNG is definitely not
-cryptographically-secure: its state can be solved by a SAT solver pretty fast;
-this applies to other arrangements ("fused", "parallel", multiple hashwords;
-with daisy-chaining being harder to solve). The known way to make PRNG
-considerably harder to solve for a SAT solver, with complexity corresponding
-to system's size, is to combine two adjacent PRNG outputs via XOR operation;
-this obviously has a speed impact and produces output with more than 1
-solution (most probably, 2). This, however, does not measurably increase the
+Note that such minimal 1-hashword PRNG is definitely not cryptographically
+secure: its state can be solved by a SAT solver pretty fast; this applies to
+other arrangements ("fused", "parallel", multiple hashwords; with
+daisy-chaining being harder to solve). The known way to make PRNG considerably
+harder to solve for a SAT solver, with complexity corresponding to system's
+size, is to combine two adjacent PRNG outputs via XOR operation; this
+obviously has a speed impact and produces output with more than 1 solution
+(most probably, 2). This, however, does not measurably increase the
 probability of PRNG output overlap, which stays below
 1/2<sup>sys_size_bits</sup>; in tests, practically undetectable.
 
-So, the basic PRNG with some, currently not formally-proven, security is as
+So, the basic PRNG with some, currently not formally proven, security is as
 follows (XOR two adjacent outputs to produce a single "compressed" PRNG
 output):
 
@@ -396,21 +406,23 @@ corresponding variables; a sort of "de-sub-division" happens in these.
 The two instructions - `Seed *= lcg * 2 + 1`, `lcg += Seed` - represent an
 "ideal" bit-shuffler: this construct represents a "bi-variable shuffler" which
 transforms the input `lcg` and `Seed` variables into another pair of variables
-with 50% bit difference relative to input, and without collisions. The whole
-core function, however, uses a more complex mixing which produces a hash
-value: the pair composed of the hash value and either a new `lcg` or a new
-`Seed` value also produces no input-to-output collisions. Thus it can be said
-that the system does not lose any input entropy. In 4-dimensional analysis,
-when `Seed`, `lcg`, `Hash`, and `msgw` values are scanned and transformed into
-subsequent `Seed`, `lcg`, and `Hash` triplets, this system does not exhibit
-local state change-related collisions due to external entropy input (all
-possible input `msgw` values map to subsequent triplets uniquely). However,
-with a small variable size (8-bit) and a large output hash size, a sparse
-entropy input has some probability of "resynchronization" event happening,
-leading to local collisions. With 16-bit variables, or even 8-bit fused-2
-arrangement (with the local state having 40-bit size instead of 24-bit),
-probability of such event is negligible. While non-fused hashing may even
-start from the "zero-state", for reliable hashing the state after 5
+in a quasi-random manner with average 50% bit difference relative to input,
+and without collisions (bijection).
+
+The whole core function, however, uses a more complex mixing which produces
+a hash value: the pair composed of the hash value and either a new `lcg` or
+a new `Seed` value also produces no input-to-output collisions. Thus it can be
+said that the system does not lose any input entropy. In 4-dimensional
+analysis, when `Seed`, `lcg`, `Hash`, and `msgw` values are scanned and
+transformed into subsequent `Seed`, `lcg`, and `Hash` triplets, this system
+does not exhibit local state change-related collisions due to external entropy
+input (all possible input `msgw` values map to subsequent triplets uniquely).
+However, with a small variable size (8-bit) and a large output hash size,
+a sparse entropy input has some probability of "resynchronization" event
+happening, leading to local collisions. With 16-bit variables, or even 8-bit
+fused-2 arrangement (with the local state having 40-bit size instead of
+24-bit), probability of such event is negligible. While non-fused hashing may
+even start from the "zero-state", for reliable hashing the state after 5
 "conditioning" rounds should be used.
 
 Another important aspect of this system, especially from the cryptography
